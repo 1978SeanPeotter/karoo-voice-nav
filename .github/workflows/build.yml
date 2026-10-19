@@ -34,7 +34,7 @@ jobs:
           gradle-version: '8.9'
 
       # The spoken cues are recorded fresh by a neural voice (Kokoro) on each build,
-      # so the repo stays plain text. The ~330 MB voice model is cached between builds.
+      # so the repo stays plain text (no ffmpeg needed). The ~330 MB voice model is cached between builds.
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
