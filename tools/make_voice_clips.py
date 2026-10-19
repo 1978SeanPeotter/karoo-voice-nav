@@ -5,9 +5,10 @@ Because the Karoo isn't a phone, and a voice engine may not be installed.
 A sound file always plays. The app can still use system TTS if you pick it.
 
 Usage: python tools/make_voice_clips.py <kokoro.onnx> <voices.bin> <out_dir>
-Needs: pip install kokoro-onnx soundfile ; ffmpeg on PATH
+Needs: pip install kokoro-onnx soundfile
 """
-import os, subprocess, sys, tempfile
+import os, sys
+import numpy as np
 import soundfile as sf
 from kokoro_onnx import Kokoro
 
@@ -51,15 +52,15 @@ def main(model, voices, out):
     k = Kokoro(model, voices)
     for name, text in phrases():
         samples, rate = k.create(text, voice="af_heart", speed=1.05, lang="en-us")
-        with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
-            sf.write(tmp.name, samples, rate)
-            # Loud and clear for wind noise; mono Vorbis keeps the APK small.
-            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", tmp.name,
-                            "-af", "silenceremove=start_periods=1:start_threshold=-45dB,"
-                                   "areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse,"
-                                   "loudnorm=I=-14:TP=-1.0:LRA=7,apad=pad_dur=0.15",
-                            "-ac", "1", "-ar", "24000", "-c:a", "libvorbis", "-q:a", "4",
-                            os.path.join(out, name + ".ogg")], check=True)
+        # Trim leading/trailing silence so the cue starts the instant it's triggered.
+        loud = np.flatnonzero(np.abs(samples) > 10 ** (-45 / 20))
+        if loud.size:
+            samples = samples[loud[0]:loud[-1] + 1]
+        # Loud and clear for wind noise: peak at -1 dBFS, then a short tail of silence.
+        samples = samples / max(np.max(np.abs(samples)), 1e-6) * 10 ** (-1 / 20)
+        samples = np.concatenate([samples, np.zeros(int(rate * 0.15), dtype=samples.dtype)])
+        # Mono Ogg Vorbis keeps the APK small and plays on any Android.
+        sf.write(os.path.join(out, name + ".ogg"), samples, rate, format="OGG", subtype="VORBIS")
         print(name, "->", text)
 
 if __name__ == "__main__":
