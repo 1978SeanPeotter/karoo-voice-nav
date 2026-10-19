@@ -69,3 +69,10 @@ val appVersionName = "1.0.1"
   odd "bear left" calls. Routes drawn on roads (Ride with GPS, Komoot, Strava) are clean.
 - Two turns very close together (under ~30 m apart) may get one combined call.
 - Turn directions pause while you're off route.
+
+## About the signing key in `signing/`
+
+Android only installs an update if it's signed with the same key as the installed app. The key
+in `signing/` keeps every build consistent. It's checked in for convenience, which is fine for a
+tool used on your own Karoos. If this ever goes public-facing, add your own key as repo secrets
+(`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`) and they take priority.
