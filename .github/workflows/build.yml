@@ -1,0 +1,75 @@
+# Builds the app every time code is pushed to main, and publishes the APK as a GitHub Release.
+# The Karoo installs from:  https://github.com/<you>/karoo-voice-nav/releases/latest/download/voice-nav.apk
+name: Build & Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create the Release
+  packages: read    # download Hammerhead's karoo-ext library
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GPR_USER: ${{ github.actor }}
+      GPR_KEY: ${{ secrets.GITHUB_TOKEN }}
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      # The spoken cues are recorded fresh by a neural voice (Kokoro) on each build,
+      # so the repo stays plain text. The ~330 MB voice model is cached between builds.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: ~/kokoro
+          key: kokoro-model-v1.0
+      - name: Record voice clips
+        run: |
+          pip install -q kokoro-onnx==0.6.1 soundfile==0.14.0
+          mkdir -p ~/kokoro
+          [ -f ~/kokoro/kokoro.onnx ] || curl -sSL -o ~/kokoro/kokoro.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+          [ -f ~/kokoro/voices.bin ] || curl -sSL -o ~/kokoro/voices.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+          python tools/make_voice_clips.py ~/kokoro/kokoro.onnx ~/kokoro/voices.bin app/src/main/res/raw
+          ls app/src/main/res/raw | wc -l
+
+      - name: Build, test, and package
+        run: |
+          gradle --no-daemon testReleaseUnitTest assembleRelease writeKarooManifest
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release.apk out/voice-nav.apk
+          cp app/build/karoo/manifest.json out/manifest.json
+          echo "VERSION=$(grep -oP 'appVersionName = "\K[^"]+' app/build.gradle.kts)" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: voice-nav
+          path: out/*
+
+      - name: Publish release v${{ env.VERSION }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: Voice Nav ${{ env.VERSION }}
+          make_latest: true
+          files: |
+            out/voice-nav.apk
+            out/manifest.json
