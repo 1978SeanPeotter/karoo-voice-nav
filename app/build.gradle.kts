@@ -10,7 +10,12 @@ val appVersionCode = 1
 val appVersionName = "1.0.0"
 
 val env: Map<String, String> = System.getenv()
-val hasReleaseKey = !env["KEYSTORE_BASE64"].isNullOrBlank()
+fun envOr(key: String, fallback: String) = env[key]?.takeIf { it.isNotBlank() } ?: fallback
+// Signing key: a repo secret if you set one, otherwise the key in signing/ (fine for a private tool).
+// Keeping the same key on every build is what lets the Karoo install updates over the old version.
+val keystoreB64: String? = env["KEYSTORE_BASE64"]?.takeIf { it.isNotBlank() }
+    ?: rootProject.file("signing/voicenav.jks.b64").takeIf { it.exists() }?.readText()
+val hasReleaseKey = keystoreB64 != null
 // GitHub Actions sets GITHUB_REPOSITORY to "your-name/karoo-voice-nav".
 val repo = env["GITHUB_REPOSITORY"] ?: "OWNER/karoo-voice-nav"
 
@@ -28,16 +33,14 @@ android {
     }
 
     signingConfigs {
-        // A fixed signing key lets the Karoo install updates over the old version.
-        // Without one (KEYSTORE_* secrets unset) the build falls back to a debug key.
         if (hasReleaseKey) {
             create("release") {
                 val ks = File.createTempFile("release", ".jks")
-                ks.writeBytes(Base64.getDecoder().decode(env["KEYSTORE_BASE64"]))
+                ks.writeBytes(Base64.getMimeDecoder().decode(keystoreB64!!.trim()))
                 storeFile = ks
-                storePassword = env["KEYSTORE_PASSWORD"]
-                keyAlias = env["KEY_ALIAS"]
-                keyPassword = env["KEY_PASSWORD"]
+                storePassword = envOr("KEYSTORE_PASSWORD", "voicenav")
+                keyAlias = envOr("KEY_ALIAS", "voicenav")
+                keyPassword = envOr("KEY_PASSWORD", "voicenav")
             }
         }
     }
