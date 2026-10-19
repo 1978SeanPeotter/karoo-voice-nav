@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ExtensionInfo
+    id="voicenav"
+    displayName="@string/app_name"
+    icon="@drawable/ic_launcher"
+    scansDevices="false">
+    <BonusAction
+        actionId="repeat"
+        displayName="@string/action_repeat" />
+    <BonusAction
+        actionId="toggle"
+        displayName="@string/action_toggle" />
+</ExtensionInfo>
