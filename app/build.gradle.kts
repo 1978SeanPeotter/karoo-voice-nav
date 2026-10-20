@@ -6,8 +6,8 @@ plugins {
 }
 
 // Bump these two for every release: versionCode must always go up.
-val appVersionCode = 1
-val appVersionName = "1.0.0"
+val appVersionCode = 2
+val appVersionName = "1.1.0"
 
 val env: Map<String, String> = System.getenv()
 fun envOr(key: String, fallback: String) = env[key]?.takeIf { it.isNotBlank() } ?: fallback
