@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="vn_alert_bg">#FFC400</color>
+    <color name="vn_alert_text">#000000</color>
+    <color name="vn_on">#2E7D32</color>
+    <color name="vn_off">#C62828</color>
+</resources>
