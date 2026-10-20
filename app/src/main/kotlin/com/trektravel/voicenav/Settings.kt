@@ -15,6 +15,7 @@ class Settings(context: Context) {
     var offRouteCue by bool("off_route_cue", true)
     var onlyWhileRecording by bool("only_recording", false)
     var useSystemTts by bool("system_tts", false)
+    var showOnScreen by bool("show_on_screen", true)
 
     /** "auto" follows the Karoo profile; or "metric" / "imperial". */
     var units: String

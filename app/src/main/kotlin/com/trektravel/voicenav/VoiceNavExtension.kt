@@ -5,6 +5,7 @@ import android.util.Log
 import io.hammerhead.karooext.KarooSystemService
 import io.hammerhead.karooext.extension.KarooExtension
 import io.hammerhead.karooext.models.DataType
+import io.hammerhead.karooext.models.InRideAlert
 import io.hammerhead.karooext.models.OnLocationChanged
 import io.hammerhead.karooext.models.OnNavigationState
 import io.hammerhead.karooext.models.OnStreamState
@@ -47,12 +48,14 @@ class VoiceNavExtension : KarooExtension("voicenav", BuildConfig.VERSION_NAME) {
         super.onCreate()
         settings = Settings(this)
         speaker = Speaker(this)
+        Status.set(this, "service", "started, version ${BuildConfig.VERSION_NAME}")
         applySettings()
         settings.registerListener(prefsListener)
 
         karoo = KarooSystemService(applicationContext)
         karoo.connect { connected ->
             Log.i(TAG, "Karoo connected=$connected")
+            Status.set(this, "service", if (connected) "running and connected to Karoo" else "DISCONNECTED from Karoo")
             if (connected) subscribe()
         }
     }
@@ -76,7 +79,7 @@ class VoiceNavExtension : KarooExtension("voicenav", BuildConfig.VERSION_NAME) {
                     d <= engine.thresholds().near * 1.5 -> Tier.NEAR
                     else -> Tier.FAR
                 }
-                speaker.say(Phrases.turn(tier, maneuverFor(d), currentUnits()), urgent = true)
+                announce(Phrases.turn(tier, maneuverFor(d), currentUnits()), urgent = true)
             }
             "toggle" -> {
                 settings.enabled = !settings.enabled
@@ -141,11 +144,24 @@ class VoiceNavExtension : KarooExtension("voicenav", BuildConfig.VERSION_NAME) {
             }
         }
         Log.i(TAG, "Navigation: $state (route ${route?.points?.size ?: 0} pts)")
+        Status.set(this, "nav", when (state) {
+            is OnNavigationState.NavigationState.NavigatingRoute ->
+                "route \"${state.name}\"" + (if (state.breadcrumb) " - BREADCRUMB mode, Karoo gives no turns" else "")
+            is OnNavigationState.NavigationState.NavigatingToDestination -> "navigating to a destination"
+            else -> "not navigating"
+        })
         if (navigating && !wasNavigating && settings.enabled) speaker.say(Phrases.READY)
     }
 
+    private var lastStatusMs = 0L
+
     private fun onTurnDistance(d: Double, onRoute: Boolean?) {
         distToTurn = d
+        val now = System.currentTimeMillis()
+        if (now - lastStatusMs > 3_000) {
+            lastStatusMs = now
+            Status.set(this, "turn", "next turn ${d.toInt()} m" + (if (onRoute == false) ", OFF route" else ""))
+        }
         if (!navigating || !settings.enabled) return
         if (settings.onlyWhileRecording && !recording) return
 
@@ -155,11 +171,30 @@ class VoiceNavExtension : KarooExtension("voicenav", BuildConfig.VERSION_NAME) {
                 is Cue.Turn -> {
                     val m = maneuverFor(d)
                     Log.i(TAG, "Cue ${cue.tier} at ${d.toInt()} m: $m")
-                    speaker.say(Phrases.turn(cue.tier, m, currentUnits()), urgent = cue.tier == Tier.NOW)
+                    announce(Phrases.turn(cue.tier, m, currentUnits()), urgent = cue.tier == Tier.NOW)
                 }
-                Cue.OffRoute -> speaker.say(Phrases.OFF_ROUTE)
-                Cue.BackOnRoute -> speaker.say(Phrases.ON_ROUTE)
+                Cue.OffRoute -> announce(Phrases.OFF_ROUTE)
+                Cue.BackOnRoute -> announce(Phrases.ON_ROUTE)
             }
+        }
+    }
+
+    /** Speak it, log it, and (optionally) flash the words on the ride screen. */
+    private fun announce(p: Phrase, urgent: Boolean = false) {
+        speaker.say(p, urgent)
+        Status.set(this, "cue", "\"${p.text}\"")
+        if (settings.showOnScreen) {
+            karoo.dispatch(
+                InRideAlert(
+                    id = "voicenav-cue",
+                    icon = R.drawable.ic_launcher,
+                    title = p.text,
+                    detail = null,
+                    autoDismissMs = 4_000,
+                    backgroundColor = R.color.vn_alert_bg,
+                    textColor = R.color.vn_alert_text,
+                ),
+            )
         }
     }
 

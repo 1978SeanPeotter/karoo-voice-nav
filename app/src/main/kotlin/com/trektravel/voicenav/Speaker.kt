@@ -63,7 +63,9 @@ class Speaker(private val context: Context) {
     private val main = Handler(Looper.getMainLooper())
     private val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val attrs = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        // MEDIA, not NAVIGATION: the Karoo routes media to Bluetooth headphones and its
+        // control-center volume slider controls it. Navigation-guidance audio may go nowhere.
+        .setUsage(AudioAttributes.USAGE_MEDIA)
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
         .build()
     private val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
@@ -111,6 +113,7 @@ class Speaker(private val context: Context) {
         val resId = context.resources.getIdentifier(p.clip, "raw", context.packageName)
         if (resId == 0) {
             Log.w(TAG, "Missing clip ${p.clip}")
+            Status.set(context, "audio", "ERROR: missing clip ${p.clip}")
             if (ttsReady) speakTts(p) else playNext()
             return
         }
@@ -124,14 +127,17 @@ class Speaker(private val context: Context) {
             mp.setOnCompletionListener { it.release(); if (player === it) player = null; playNext() }
             mp.setOnErrorListener { m, what, extra ->
                 Log.w(TAG, "MediaPlayer error $what/$extra on ${p.clip}")
+                Status.set(context, "audio", "ERROR: player error $what/$extra")
                 m.release(); if (player === m) player = null; playNext(); true
             }
             mp.prepare()
             player = mp
             mp.start()
             Log.i(TAG, "Saying (clip): ${p.text}")
+            Status.set(context, "audio", "played \"${p.text}\" → ${Status.audioOutput(context)}")
         } catch (e: Exception) {
             Log.e(TAG, "Clip playback failed", e)
+            Status.set(context, "audio", "ERROR: ${e.javaClass.simpleName}: ${e.message}")
             playNext()
         }
     }
